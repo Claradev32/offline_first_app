@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:offline_first_app/features/core/database.dart';
@@ -5,8 +6,12 @@ import 'package:offline_first_app/features/utils.dart';
 import 'package:sqflite/sqflite.dart';
 
 class StrapiService {
-  static const String baseUrl = 'http://localhost:3000';
+  static const String baseUrl = 'http://127.0.0.1:1337';
   final DatabaseHelper databaseHelper = DatabaseHelper();
+  final _todosStreamController =
+      StreamController<List<Map<String, dynamic>>>.broadcast();
+  Stream<List<Map<String, dynamic>>> get todosStream =>
+      _todosStreamController.stream;
 
   Future<void> fetchAndCacheTodos() async {
     final response = await http.get(Uri.parse('$baseUrl/api/todos'));
@@ -39,6 +44,7 @@ class StrapiService {
           );
         }
       });
+      await _updateTodosStream();
     } else {
       throw Exception('Failed to load todos');
     }
@@ -54,7 +60,8 @@ class StrapiService {
     }
   }
 
-  Future<void> createLocalTodo(Map<String, dynamic> todo) async {
+  Future<Map<String, dynamic>> createLocalTodo(
+      Map<String, dynamic> todo) async {
     final db = await databaseHelper.database;
     final id = await db.insert(
       'todos',
@@ -62,18 +69,28 @@ class StrapiService {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     todo['id'] = id;
-    // Synchronize the new todo with the server in the background
     await uploadTodoToBackend(todo);
+    await _updateTodosStream();
+    return todo;
   }
 
   Future<void> updateLocalTodo(Map<String, dynamic> todo) async {
     final db = await databaseHelper.database;
+    final updateData = {
+      'title': todo['title'],
+      'description': todo['description'],
+      'isCompleted':
+          todo['isCompleted'] == 1 || todo['isCompleted'] == true ? 1 : 0,
+      'updatedAt': DateTime.now().toIso8601String(),
+    };
     await db.update(
       'todos',
-      todo,
+      updateData,
       where: 'id = ?',
       whereArgs: [todo['id']],
     );
+    await updateTodoOnBackend({...todo, ...updateData});
+    await _updateTodosStream();
   }
 
   Future<void> deleteLocalTodo(int id) async {
@@ -83,6 +100,7 @@ class StrapiService {
       where: 'id = ?',
       whereArgs: [id],
     );
+    await _updateTodosStream();
   }
 
   Future<void> uploadTodoToBackend(Map<String, dynamic> todo) async {
@@ -95,6 +113,29 @@ class StrapiService {
           body: json.encode({
             "data": {
               "id": todo['id'],
+              "title": todo['title'],
+              "description": todo['description'],
+              "isCompleted": todo['isCompleted'] == 1 ? true : false,
+            }
+          }),
+        );
+      } else {
+        return;
+      }
+    } catch (e) {
+      throw Exception(e);
+    }
+  }
+
+  Future<void> updateTodoOnBackend(Map<String, dynamic> todo) async {
+    try {
+      var connectivityService = ConnectivityService();
+      if (await connectivityService.checkConnectivity()) {
+        await http.put(
+          Uri.parse('$baseUrl/api/todos/${todo['id']}'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            "data": {
               "title": todo['title'],
               "description": todo['description'],
               "isCompleted": todo['isCompleted'] == 1 ? true : false,
@@ -180,5 +221,10 @@ class StrapiService {
     } else {
       throw Exception('Failed to load todos');
     }
+  }
+
+  Future<void> _updateTodosStream() async {
+    final todos = await getLocalTodos();
+    _todosStreamController.add(todos);
   }
 }

@@ -57,8 +57,8 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('Todo List'),
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: strapiService.getLocalTodos(),
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: strapiService.todosStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const CircularProgressIndicator();

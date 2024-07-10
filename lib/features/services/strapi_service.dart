@@ -5,9 +5,9 @@ import 'package:offline_first_app/features/core/database.dart';
 import 'package:sqflite/sqflite.dart';
 
 class StrapiService {
-  static const String baseUrl =
-      'http://10.0.2.2:1337'; // Use this for Android emulator
-  // static const String baseUrl = 'http://localhost:1337'; // Use this for iOS simulator
+  // static const String baseUrl =
+  //     'http://10.0.2.2:1337'; // Use this for Android emulator
+  static const String baseUrl = 'http://localhost:1337'; // Use this for iOS simulator
   final DatabaseHelper databaseHelper = DatabaseHelper();
 
   final _todosStreamController =

@@ -196,7 +196,6 @@ class StrapiService {
   }
 
   Future<void> syncLocalTodosWithBackend() async {
-    print("syncing");
     final localTodos = await getLocalTodos();
     // print(localTodos);
     for (var todo in localTodos) {

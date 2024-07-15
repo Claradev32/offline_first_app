@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:background_fetch/background_fetch.dart';
 import 'package:offline_first_app/features/services/strapi_service.dart';
-import 'package:offline_first_app/features/utils.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -14,34 +13,44 @@ class _HomePageState extends State<HomePage> {
   final StrapiService strapiService = StrapiService();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
+  final bool _enabled = true;
 
   @override
   void initState() {
     super.initState();
     strapiService.fetchAndCacheTodos();
-    initConnectivity();
-    initBackgroundFetch();
+    strapiService.syncLocalTodosWithBackend();
+    initPlatformState();
   }
 
-  void initConnectivity() {
-    ConnectivityService()
-        .initConnectivity(strapiService.syncLocalTodosWithBackend);
+  Future<void> initPlatformState() async {
+    await BackgroundFetch.configure(
+        BackgroundFetchConfig(
+            minimumFetchInterval: 15,
+            stopOnTerminate: false,
+            enableHeadless: true,
+            requiresBatteryNotLow: false,
+            requiresCharging: false,
+            requiresStorageNotLow: false,
+            requiresDeviceIdle: false,
+            requiredNetworkType: NetworkType.ANY),
+        _onBackgroundFetch,
+        _onBackgroundFetchTimeout);
+    setState(() {});
+
+    if (_enabled) {
+      await BackgroundFetch.start();
+    }
+    if (!mounted) return;
   }
 
-  void initBackgroundFetch() {
-    BackgroundFetch.configure(
-      BackgroundFetchConfig(
-        minimumFetchInterval: 15,
-        stopOnTerminate: false,
-        enableHeadless: true,
-        startOnBoot: true,
-        forceAlarmManager: false,
-      ),
-      (String taskId) async {
-        strapiService.syncLocalTodosWithBackend();
-        BackgroundFetch.finish(taskId);
-      },
-    );
+  void _onBackgroundFetch(String taskId) async {
+    await strapiService.syncLocalTodosWithBackend();
+    BackgroundFetch.finish(taskId);
+  }
+
+  void _onBackgroundFetchTimeout(String taskId) {
+    BackgroundFetch.finish(taskId);
   }
 
   @override

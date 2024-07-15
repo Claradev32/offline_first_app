@@ -7,7 +7,8 @@ import 'package:sqflite/sqflite.dart';
 class StrapiService {
   // static const String baseUrl =
   //     'http://10.0.2.2:1337'; // Use this for Android emulator
-  static const String baseUrl = 'http://localhost:1337'; // Use this for iOS simulator
+  static const String baseUrl =
+      'http://localhost:1337'; // Use this for iOS simulator
   final DatabaseHelper databaseHelper = DatabaseHelper();
 
   final _todosStreamController =
@@ -34,7 +35,10 @@ class StrapiService {
                 "id": todo['id'],
                 "title": todo['attributes']['title'],
                 "description": todo['attributes']['description'],
-                "isCompleted": todo['attributes']['isCompleted'] ? 1 : 0,
+                "isCompleted": todo['attributes']['isCompleted'] == 1 ||
+                        todo['isCompleted'] == true
+                    ? 1
+                    : 0,
                 "createdAt": todo['attributes']['createdAt'],
                 "updatedAt": todo['attributes']['updatedAt'],
                 "isNew": 0,
@@ -103,7 +107,8 @@ class StrapiService {
     });
   }
 
-  Future<void> uploadTodoToBackend(Map<String, dynamic> todo) async {
+  Future<void> uploadTodoToBackend(Map<String, dynamic> todo,
+      {bool isSync = false}) async {
     try {
       final response = await http
           .post(
@@ -120,9 +125,21 @@ class StrapiService {
           .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        final responseData = json.decode(response.body);
+        final backendId = responseData['data']['id'];
+
         final db = await databaseHelper.database;
-        await db.update('todos', {'isNew': 0},
-            where: 'id = ?', whereArgs: [todo['id']]);
+        await db.update(
+          'todos',
+          {
+            'id': backendId,
+            'isNew': 0,
+            'updatedAt': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [todo['id']],
+        );
+        if (!isSync) todo['id'] = backendId;
       } else {
         throw Exception('Failed to upload todo');
       }
@@ -179,11 +196,12 @@ class StrapiService {
   }
 
   Future<void> syncLocalTodosWithBackend() async {
+    print("syncing");
     final localTodos = await getLocalTodos();
-
+    // print(localTodos);
     for (var todo in localTodos) {
       if (todo['isNew'] == 1) {
-        await uploadTodoToBackend(todo);
+        await uploadTodoToBackend(todo, isSync: true);
       } else if (todo['isUpdated'] == 1) {
         await updateTodoOnBackend(todo);
       }
